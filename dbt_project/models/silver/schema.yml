@@ -1,0 +1,62 @@
+version: 2
+
+models:
+  - name: silver_orders
+    description: "Zamówienia po walidacji i deduplikacji."
+    config:
+      store_failures: true
+    columns:
+      - name: order_id
+        description: "Unikalny identyfikator zamówienia."
+        tests:
+          - not_null:
+              severity: error
+          - unique:
+              severity: error
+      - name: customer_id
+        tests:
+          - not_null:
+              severity: warn
+          - relationships:
+              to:    ref('silver_customers')
+              field: customer_id
+              severity: error
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['pending', 'paid', 'shipped', 'delivered', 'cancelled', 'refunded']
+              severity: error
+              config:
+                where: "created_at >= dateadd('day', -7, current_date)"
+      - name: amount
+        tests:
+          - not_null:
+              severity: error
+          - dbt_utils.expression_is_true:
+              expression: "amount > 0"
+              severity: error
+
+  - name: silver_products
+    description: "Katalog produktów."
+    config:
+      store_failures: true
+    columns:
+      - name: product_id
+        tests:
+          - not_null
+          - unique
+      - name: price
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0.01
+              max_value: 100000
+              severity: error
+      - name: category
+        tests:
+          - accepted_values:
+              values: ['Elektronika', 'Odzież', 'Dom', 'Sport', 'Kosmetyki', 'Książki']
+              severity: warn
+      - name: stock_quantity
+        tests:
+          - positive_or_zero          # <- custom macro, see macros/

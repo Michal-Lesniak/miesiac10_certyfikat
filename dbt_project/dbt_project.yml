@@ -1,0 +1,19 @@
+name: ecommerce_m10
+version: 1.0.0
+config-version: 2
+
+profile: ecommerce
+
+model-paths:   ["models"]
+test-paths:    ["tests"]
+macro-paths:   ["macros"]
+
+models:
+  ecommerce_m10:
+    silver:
+      +materialized: table
+      +schema:       silver
+
+tests:
+  +store_failures: true
+  +schema:         dq_failures

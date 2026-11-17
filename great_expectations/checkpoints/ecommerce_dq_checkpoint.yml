@@ -1,0 +1,63 @@
+name: ecommerce_dq_checkpoint
+config_version: 1.0
+class_name: Checkpoint
+run_name_template: "%Y%m%d-%H%M%S-ecommerce-dq"
+
+validations:
+  - batch_request:
+      datasource_name:          databricks_spark_datasource
+      data_connector_name:      runtime_data_connector
+      data_asset_name:          silver_orders
+      runtime_parameters:
+        # items_total denormalizowany z bronze.order_items — wymagany przez
+        # expect_order_amount_matches_items (custom expectation).
+        query: |
+          SELECT o.*,
+                 COALESCE(i.items_total, 0.0) AS items_total
+          FROM ecommerce_catalog.silver.orders o
+          LEFT JOIN (
+              SELECT order_id, SUM(line_total) AS items_total
+              FROM ecommerce_catalog.bronze.order_items
+              GROUP BY order_id
+          ) i USING (order_id)
+      batch_identifiers:
+        default_identifier_name: orders_daily
+    expectation_suite_name: orders_suite
+
+  - batch_request:
+      datasource_name:          databricks_spark_datasource
+      data_connector_name:      runtime_data_connector
+      data_asset_name:          silver_products
+      runtime_parameters:
+        query: "SELECT * FROM ecommerce_catalog.silver.products"
+      batch_identifiers:
+        default_identifier_name: products_daily
+    expectation_suite_name: products_suite
+
+  - batch_request:
+      datasource_name:          databricks_spark_datasource
+      data_connector_name:      runtime_data_connector
+      data_asset_name:          silver_customers
+      runtime_parameters:
+        query: "SELECT * FROM ecommerce_catalog.silver.customers"
+      batch_identifiers:
+        default_identifier_name: customers_daily
+    expectation_suite_name: customers_suite
+
+action_list:
+  - name: store_validation_result
+    action:
+      class_name: StoreValidationResultAction
+  - name: update_data_docs
+    action:
+      class_name: UpdateDataDocsAction
+      site_names:
+        - local_site
+  - name: notify_on_failure
+    action:
+      class_name: SlackNotificationAction
+      slack_webhook: ${SLACK_WEBHOOK_URL}
+      notify_on: failure
+      renderer:
+        module_name: great_expectations.render.renderer.slack_renderer
+        class_name:  SlackRenderer
